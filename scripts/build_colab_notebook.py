@@ -142,6 +142,7 @@ Already downloaded? This cell skips it.
 
 code(
     """
+import shutil
 from pathlib import Path
 
 DATA = Path("/content/data")
@@ -149,16 +150,31 @@ LS = DATA / "LibriSpeech"
 SPLITS = ["train-clean-100", "dev-clean", "test-clean"]
 
 for split in SPLITS:
-    if (LS / split).exists():
+    marker = LS / split / ".complete"
+    if marker.exists():
         print("have", split)
         continue
+    if (LS / split).exists():
+        # A dataset downloaded by an older version of this notebook has no marker.
+        existing = len(list((LS / split).rglob("*.flac")))
+        if existing >= 1000:
+            marker.write_text("ok", encoding="utf-8")
+            print("have", split, f"({existing} flac)")
+            continue
+        # Otherwise the previous run died during extraction: start that split over.
+        print(f"removing partial extraction of {split} ({existing} flac)")
+        shutil.rmtree(LS / split)
+
     tar = f"{split}.tar.gz"
-    sh(f"wget -q -c https://www.openslr.org/resources/12/{tar} -O /content/{tar}")
+    sh(f"wget -c --progress=dot:giga https://www.openslr.org/resources/12/{tar} -O /content/{tar}")
     sh(f"tar -xzf /content/{tar} -C {DATA}")
     sh(f"rm -f /content/{tar}")
+    marker.write_text("ok", encoding="utf-8")
 
 for split in SPLITS:
-    print(split, len(list((LS / split).rglob("*.flac"))), "flac files")
+    n = len(list((LS / split).rglob("*.flac")))
+    print(f"{split}: {n} flac files")
+    assert n > 100, f"{split} looks truncated ({n} files)"
 """
 )
 
