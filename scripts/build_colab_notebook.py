@@ -73,7 +73,13 @@ if not WORKDIR.exists():
         url = REPO_URL
         if GH_TOKEN:
             url = "https://" + GH_TOKEN + "@" + REPO_URL.split("//", 1)[1]
-        sh(f"git clone --depth 1 {url} {WORKDIR}", secret=GH_TOKEN)
+        try:
+            sh(f"git clone --depth 1 {url} {WORKDIR}", secret=GH_TOKEN)
+        except subprocess.CalledProcessError:
+            raise RuntimeError(
+                "git clone failed (exit 128 is usually auth). If the repo is private, add a "
+                "Colab secret named GH_TOKEN with 'repo' scope, or make the repo public."
+            ) from None
     else:
         from google.colab import files
         print("Upload asr.zip built by `python scripts/pack.py`")
