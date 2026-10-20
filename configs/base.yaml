@@ -53,7 +53,7 @@ train:
   min_lr_ratio: 0.02
   grad_clip: 5.0
   amp: true
-  num_workers: 4
+  num_workers: 2
   log_every: 100
   limit_batches: 0
   val_limit_batches: 0

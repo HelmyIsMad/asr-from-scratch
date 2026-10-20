@@ -304,13 +304,36 @@ def train(cfg):
     return best_wer
 
 
+def _report_crash(cfg):
+    """Persist the traceback next to the run and, if enabled, push it to the repo."""
+    import traceback
+
+    tb = traceback.format_exc()
+    try:
+        out_dir = Path(cfg["train"]["out_dir"])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "crash.log").write_text(tb, encoding="utf-8")
+        repo = cfg["train"].get("repo_dir")
+        if os.environ.get("ASR_PUSH_LOGS", "0") == "1" and repo:
+            dest = Path(repo) / "logs" / out_dir.name
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(out_dir / "crash.log", dest / "crash.log")
+            push_logs(repo, [str(dest)], f"crash in {out_dir.name}")
+    except Exception:
+        pass
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Train a CTC recogniser from scratch")
     parser.add_argument("--config", required=True)
     parser.add_argument("--set", nargs="*", default=[], help="dotted overrides, e.g. train.lr=0.01")
     args = parser.parse_args(argv)
     cfg = load_config(args.config, args.set)
-    train(cfg)
+    try:
+        train(cfg)
+    except Exception:
+        _report_crash(cfg)
+        raise
 
 
 if __name__ == "__main__":

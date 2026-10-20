@@ -72,20 +72,18 @@ class QuartzNet(nn.Module):
                 bidirectional=True,
                 dropout=dropout if rnn_layers > 1 else 0.0,
             )
-            head_in = rnn_hidden * 2
+            self.head = nn.Linear(rnn_hidden * 2, vocab_size)
         else:
-            head_in = channels
-
-        self.head = nn.Conv2d(head_in, vocab_size, 1)
+            self.head = nn.Conv2d(channels, vocab_size, 1)
 
     def forward(self, x, lengths=None):
         """x: (B, 1, n_mels, T) -> log-probs (B, T', V), out_lengths."""
         out_lengths = subsampled_lengths(lengths, self.subsample_factor) if lengths is not None else None
         y = self.stem(x)
         y = self.blocks(y)  # (B, C, n_mels, T')
-        y = y.mean(dim=2)  # collapse frequency -> (B, C, T')
+
         if self.rnn is not None:
-            y = y.transpose(1, 2)  # (B, T', C)
+            y = y.mean(dim=2).transpose(1, 2)  # (B, T', C)
             if out_lengths is not None:
                 packed = nn.utils.rnn.pack_padded_sequence(
                     y, out_lengths.cpu(), batch_first=True, enforce_sorted=False
@@ -94,8 +92,11 @@ class QuartzNet(nn.Module):
                 y, _ = nn.utils.rnn.pad_packed_sequence(y, batch_first=True, total_length=int(out_lengths.max()))
             else:
                 y, _ = self.rnn(y)
-            y = y.transpose(1, 2)  # (B, 2H, T')
-        y = self.head(y).transpose(1, 2)  # (B, T', V)
+            y = self.head(y)  # (B, T', V)
+        else:
+            y = self.head(y)  # (B, V, n_mels, T')
+            y = y.mean(dim=2).transpose(1, 2)  # (B, T', V)
+
         return y.log_softmax(dim=-1), out_lengths
 
     def num_parameters(self):
