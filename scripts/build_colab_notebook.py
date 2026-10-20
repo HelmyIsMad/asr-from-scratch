@@ -64,9 +64,21 @@ try:
 except Exception:
     GH_TOKEN = None
 
-def sh(cmd, cwd=None, check=True, secret=None):
-    print(f"$ {cmd.replace(secret, '***') if secret else cmd}")
-    subprocess.run(cmd, shell=True, cwd=cwd, check=check)
+def sh(cmd, cwd=None, check=True, secret=None, stream=False):
+    print(f"$ {cmd.replace(secret, '***') if secret else cmd}", flush=True)
+    if stream:  # inherit stdout/stderr so progress bars stay live
+        rc, out, err = subprocess.run(cmd, shell=True, cwd=cwd).returncode, "", ""
+    else:
+        proc = subprocess.run(cmd, shell=True, cwd=cwd, text=True, capture_output=True)
+        rc, out, err = proc.returncode, proc.stdout, proc.stderr
+    if out.strip():
+        print(out.rstrip()[-4000:])
+    if rc != 0:
+        if err.strip():
+            print(err.rstrip()[-4000:])
+        if check:
+            raise RuntimeError(f"command failed with exit {rc}: {cmd}")
+    return rc
 
 if not WORKDIR.exists():
     if REPO_URL:
@@ -148,6 +160,7 @@ from pathlib import Path
 DATA = Path("/content/data")
 LS = DATA / "LibriSpeech"
 SPLITS = ["train-clean-100", "dev-clean", "test-clean"]
+DATA.mkdir(parents=True, exist_ok=True)
 
 # openslr throttles per connection, so 16 parallel streams beat a single wget by a lot.
 sh("apt-get -qq install -y aria2 > /dev/null 2>&1 || true")
@@ -155,9 +168,9 @@ ARIA = shutil.which("aria2c")
 
 def fetch(url, dest):
     if ARIA:
-        sh(f"aria2c -x 16 -s 16 -k 1M -c --file-allocation=none -d /content -o {Path(dest).name} '{url}'")
+        sh(f"aria2c -x 16 -s 16 -k 1M -c --file-allocation=none -d /content -o {Path(dest).name} '{url}'", stream=True)
     else:
-        sh(f"wget -c --progress=dot:giga '{url}' -O {dest}")
+        sh(f"wget -c --progress=dot:giga '{url}' -O {dest}", stream=True)
 
 for split in SPLITS:
     marker = LS / split / ".complete"
@@ -176,9 +189,21 @@ for split in SPLITS:
         shutil.rmtree(LS / split)
 
     tar = f"{split}.tar.gz"
-    fetch(f"https://www.openslr.org/resources/12/{tar}", f"/content/{tar}")
-    sh(f"tar -xzf /content/{tar} -C {DATA}")
-    sh(f"rm -f /content/{tar}")
+    tar_path = Path("/content") / tar
+    fetch(f"https://www.openslr.org/resources/12/{tar}", str(tar_path))
+
+    # A truncated tarball would otherwise fail inside tar with a cryptic gzip error.
+    expect = {"train-clean-100": 5.5e9, "dev-clean": 2.7e8, "test-clean": 2.7e8}[split]
+    got = tar_path.stat().st_size
+    if got < expect * 0.95:
+        tar_path.unlink(missing_ok=True)
+        raise RuntimeError(f"{tar} is only {got / 1e9:.2f} GB, expected ~{expect / 1e9:.2f} GB - re-run this cell")
+
+    rc = sh(f"tar -xzf {tar_path} -C {DATA}", check=False)
+    if rc != 0:
+        tar_path.unlink(missing_ok=True)
+        raise RuntimeError(f"extraction of {tar} failed; deleted the tarball, re-run this cell to fetch it again")
+    sh(f"rm -f {tar_path}")
     marker.write_text("ok", encoding="utf-8")
 
 for split in SPLITS:
