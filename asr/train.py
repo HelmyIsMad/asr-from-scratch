@@ -129,7 +129,7 @@ def validate(model, loader, vocab, criterion, device, amp, limit_batches=0):
         tokens = batch["tokens"].to(device, non_blocking=True)
         with torch.autocast(device_type=device.type, enabled=amp):
             log_probs, out_lens = model(mel, batch["mel_lens"])
-            loss = criterion(log_probs.transpose(0, 1), tokens, out_lens, batch["token_lens"])
+        loss = criterion(log_probs.float().transpose(0, 1), tokens, out_lens, batch["token_lens"])
         total_loss += float(loss) * tokens.numel()
         total_frames += int(tokens.numel())
         preds = greedy_decode(log_probs.float(), out_lens)
@@ -221,10 +221,9 @@ def train(cfg):
             tokens = batch["tokens"].to(device, non_blocking=True)
             with torch.autocast(device_type=device.type, enabled=amp):
                 log_probs, out_lens = model(mel, batch["mel_lens"])
-                loss = criterion(log_probs.transpose(0, 1), tokens, out_lens, batch["token_lens"])
-                loss = loss / grad_accum
-            scaler.scale(loss).backward()
-            running_loss += float(loss) * grad_accum * tokens.numel()
+            loss = criterion(log_probs.float().transpose(0, 1), tokens, out_lens, batch["token_lens"])
+            scaler.scale(loss / grad_accum).backward()
+            running_loss += float(loss) * tokens.numel()
             seen_tokens += int(tokens.numel())
 
             done = (i + 1) % grad_accum == 0 or (i + 1) == len(train_loader)

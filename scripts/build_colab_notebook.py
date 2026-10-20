@@ -57,13 +57,23 @@ from pathlib import Path
 REPO_URL = "https://github.com/HelmyIsMad/asr-from-scratch.git"
 WORKDIR = Path("/content/asr")
 
-def sh(cmd, cwd=None, check=True):
-    print(f"$ {cmd}")
+# Optional: lets the private repo clone and lets the run push its logs.
+try:
+    from google.colab import userdata
+    GH_TOKEN = userdata.get("GH_TOKEN")
+except Exception:
+    GH_TOKEN = None
+
+def sh(cmd, cwd=None, check=True, secret=None):
+    print(f"$ {cmd.replace(secret, '***') if secret else cmd}")
     subprocess.run(cmd, shell=True, cwd=cwd, check=check)
 
 if not WORKDIR.exists():
     if REPO_URL:
-        sh(f"git clone --depth 1 {REPO_URL} {WORKDIR}")
+        url = REPO_URL
+        if GH_TOKEN:
+            url = "https://" + GH_TOKEN + "@" + REPO_URL.split("//", 1)[1]
+        sh(f"git clone --depth 1 {url} {WORKDIR}", secret=GH_TOKEN)
     else:
         from google.colab import files
         print("Upload asr.zip built by `python scripts/pack.py`")
@@ -89,15 +99,10 @@ import os
 
 sh("pip install -q soundfile pyyaml tqdm")
 
-try:
-    from google.colab import userdata
-    GH_TOKEN = userdata.get("GH_TOKEN")
-except Exception:
-    GH_TOKEN = None
-
 PUSH_LOGS = bool(GH_TOKEN and REPO_URL)
 if PUSH_LOGS:
-    sh(f"git -C {WORKDIR} remote set-url origin https://{GH_TOKEN}@{REPO_URL.split('//', 1)[1]}")
+    authed = "https://" + GH_TOKEN + "@" + REPO_URL.split("//", 1)[1]
+    sh(f"git -C {WORKDIR} remote set-url origin {authed}", secret=GH_TOKEN)
     os.environ["ASR_PUSH_LOGS"] = "1"
 print("log push:", PUSH_LOGS)
 """
