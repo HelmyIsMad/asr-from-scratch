@@ -1,0 +1,55 @@
+# Wider model for an A100 / 24 GB+ GPU. Roughly 26x the parameters of base.yaml.
+seed: 1337
+
+data:
+  root: data/librispeech
+  manifest_dir: data/manifests
+  sample_rate: 16000
+  val_max_utts: 400
+  features:
+    n_mels: 80
+    n_fft: 400
+    win_length: 400
+    hop_length: 160
+    cmvn: true
+
+augment:
+  speed_perturb: [0.9, 1.0, 1.1]
+  speed_perturb_p: 0.5
+  gain_db: [-6, 6]
+  gain_p: 0.5
+  noise_snr_db: [5, 20]
+  noise_p: 0.0
+  rir_p: 0.0
+  specaug:
+    freq_masks: 2
+    freq_width: 27
+    time_masks: 2
+    time_width_frac: 0.05
+    p: 0.6
+
+model:
+  n_mels: 80
+  channels: 512
+  block_repeats: [2, 2, 2, 2, 2]
+  kernel_size: 19
+  dropout: 0.1
+  rnn_layers: 0
+
+train:
+  epochs: 60
+  batch_size: 24
+  eval_batch_size: 8
+  grad_accum: 2
+  lr: 0.008
+  weight_decay: 0.001
+  warmup_epochs: 3
+  schedule: cosine
+  min_lr_ratio: 0.02
+  grad_clip: 5.0
+  amp: true
+  num_workers: 8
+  log_every: 100
+  out_dir: runs/large
+  resume: true
+  repo_dir: .

@@ -1,0 +1,48 @@
+# Tiny model + tiny data: verifies shapes, CTC feasibility and the augmentation
+# path in about a minute. Never use this for real results.
+seed: 0
+
+data:
+  root: data/tiny
+  manifest_dir: data/tiny/manifests
+  sample_rate: 16000
+  val_max_utts: 8
+  features:
+    n_mels: 40
+    n_fft: 400
+    win_length: 400
+    hop_length: 160
+    cmvn: true
+
+augment:
+  speed_perturb: [0.9, 1.0, 1.1]
+  speed_perturb_p: 0.3
+  gain_db: [-6, 6]
+  gain_p: 0.5
+  specaug:
+    freq_masks: 1
+    freq_width: 8
+    time_masks: 1
+    time_width_frac: 0.05
+    p: 0.5
+
+model:
+  n_mels: 40
+  channels: 64
+  block_repeats: [1, 1]
+  kernel_size: 11
+  dropout: 0.0
+
+train:
+  epochs: 2
+  batch_size: 4
+  eval_batch_size: 4
+  grad_accum: 1
+  lr: 0.01
+  warmup_epochs: 0
+  schedule: cosine
+  amp: false
+  num_workers: 0
+  log_every: 2
+  out_dir: runs/smoke
+  resume: false
