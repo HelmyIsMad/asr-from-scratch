@@ -149,6 +149,16 @@ DATA = Path("/content/data")
 LS = DATA / "LibriSpeech"
 SPLITS = ["train-clean-100", "dev-clean", "test-clean"]
 
+# openslr throttles per connection, so 16 parallel streams beat a single wget by a lot.
+sh("apt-get -qq install -y aria2 > /dev/null 2>&1 || true")
+ARIA = shutil.which("aria2c")
+
+def fetch(url, dest):
+    if ARIA:
+        sh(f"aria2c -x 16 -s 16 -k 1M -c --file-allocation=none -d /content -o {Path(dest).name} '{url}'")
+    else:
+        sh(f"wget -c --progress=dot:giga '{url}' -O {dest}")
+
 for split in SPLITS:
     marker = LS / split / ".complete"
     if marker.exists():
@@ -166,7 +176,7 @@ for split in SPLITS:
         shutil.rmtree(LS / split)
 
     tar = f"{split}.tar.gz"
-    sh(f"wget -c --progress=dot:giga https://www.openslr.org/resources/12/{tar} -O /content/{tar}")
+    fetch(f"https://www.openslr.org/resources/12/{tar}", f"/content/{tar}")
     sh(f"tar -xzf /content/{tar} -C {DATA}")
     sh(f"rm -f /content/{tar}")
     marker.write_text("ok", encoding="utf-8")
